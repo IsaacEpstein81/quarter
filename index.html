@@ -166,7 +166,7 @@
     #entry-count { font-size: 12px; color: var(--muted); }
 
     #log-list {
-      flex: 1; overflow-y: auto;
+      flex: 1; overflow-y: auto; min-height: 0;
       -webkit-overflow-scrolling: touch;
       display: flex; flex-direction: column; gap: 8px;
       padding-bottom: 8px;
@@ -193,7 +193,7 @@
     #btn-export svg { flex-shrink: 0; }
 
     #history-list {
-      flex: 1; overflow-y: auto;
+      flex: 1; overflow-y: auto; min-height: 0;
       -webkit-overflow-scrolling: touch;
       padding: 0 16px 8px;
       display: flex; flex-direction: column; gap: 10px;
@@ -266,15 +266,23 @@
     }
 
     .log-time {
-      font-size: 12px; color: var(--accent2); font-weight: 600;
+      font-size: 11px; color: var(--accent2); font-weight: 600;
       font-variant-numeric: tabular-nums;
-      white-space: nowrap; padding-top: 1px; min-width: 44px;
+      white-space: nowrap; padding-top: 2px; flex-shrink: 0;
     }
     .log-text { font-size: 15px; line-height: 1.4; flex: 1; }
+    .log-edit {
+      background: none; border: none; color: var(--muted);
+      font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1;
+      -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+      flex-shrink: 0;
+    }
+    .log-edit:active { color: var(--accent2); }
     .log-del {
       background: none; border: none; color: var(--surface2);
       font-size: 18px; cursor: pointer; padding: 0 2px; line-height: 1;
       -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+      flex-shrink: 0;
     }
     .log-del:active { color: var(--danger); }
 
@@ -514,16 +522,19 @@
 // ─────────────────── Constants ───────────────────
 const INTERVAL  = 15 * 60;   // seconds
 const STORE_KEY = 'tracker_log_v1';
+const TIMER_KEY = 'tracker_timer_v1';
 const CIRC      = 2 * Math.PI * 65; // r=65 → ~408
 
 // ─────────────────── State ───────────────────────
-let secondsLeft  = INTERVAL;
-let isRunning    = false;
-let tickInterval = null;
-let sessionStart = null;
-let lastLogTime  = null;
-let audioCtx     = null;
-let currentTab   = 'today';
+let secondsLeft     = INTERVAL;
+let isRunning       = false;
+let tickInterval    = null;
+let sessionStart    = null;
+let lastLogTime     = null;
+let audioCtx        = null;
+let currentTab      = 'today';
+let editingEntryId  = null;  // null = new entry, number = editing existing
+let editingDateKey  = null;
 
 // ─────────────────── DOM refs ────────────────────
 const $status    = document.getElementById('timer-status');
@@ -550,6 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTodayLog();
   registerSW();
   checkNotifPermission();
+  restoreTimerState();
 });
 
 function registerSW() {
@@ -568,6 +580,38 @@ async function requestNotifPermission() {
   if (p === 'granted') {
     $notifBanner.style.display = 'none';
     showToast('Notifications enabled!');
+  }
+}
+
+// ─────────────────── Timer persistence ──────────
+function persistTimerState() {
+  localStorage.setItem(TIMER_KEY, JSON.stringify({
+    willAlarmAt: Date.now() + secondsLeft * 1000,
+    lastLogAt:   (lastLogTime || new Date()).toISOString()
+  }));
+}
+
+function clearTimerState() {
+  localStorage.removeItem(TIMER_KEY);
+}
+
+function restoreTimerState() {
+  const raw = localStorage.getItem(TIMER_KEY);
+  if (!raw) return;
+  try {
+    const { willAlarmAt, lastLogAt } = JSON.parse(raw);
+    lastLogTime  = new Date(lastLogAt);
+    sessionStart = sessionStart || new Date(lastLogAt);
+    clearTimerState();
+    const remaining = Math.floor((willAlarmAt - Date.now()) / 1000);
+    if (remaining <= 0) {
+      onAlarm();
+    } else {
+      secondsLeft = remaining;
+      startTimer();
+    }
+  } catch(e) {
+    localStorage.removeItem(TIMER_KEY);
   }
 }
 
@@ -593,7 +637,9 @@ function startTimer() {
   $btnStart.textContent = 'Pause';
   $status.textContent = 'Tracking';
   $trackingDot.classList.add('visible');
+  if (tickInterval) clearInterval(tickInterval);
   tickInterval = setInterval(tick, 1000);
+  persistTimerState();
   tick();
 }
 
@@ -604,6 +650,7 @@ function stopTimer() {
   $btnStart.textContent = 'Resume';
   $status.textContent = 'Paused';
   $trackingDot.classList.remove('visible');
+  clearTimerState();
 }
 
 function tick() {
@@ -618,6 +665,7 @@ function tick() {
 function onAlarm() {
   clearInterval(tickInterval);
   tickInterval = null;
+  clearTimerState();
   secondsLeft = INTERVAL;
   updateRing(1);
   $digits.textContent = '15:00';
@@ -691,20 +739,40 @@ function sendNotification() {
 // ─────────────────── Modal ───────────────────────
 let modalOpenTime = null;
 
-function openModal() {
-  modalOpenTime = new Date();
-  const from = lastLogTime ? formatTime(lastLogTime) : '--';
-  const to   = formatTime(modalOpenTime);
-  document.getElementById('modal-time-range').textContent = `${from}–${to}`;
-  $input.value = '';
+function openModal(editEntry = null) {
+  editingEntryId = editEntry ? editEntry.id   : null;
+  editingDateKey = editEntry ? editEntry.dateKey : null;
+
+  if (editEntry) {
+    document.getElementById('modal-title').textContent = 'Edit entry';
+    document.getElementById('modal-time-range').textContent =
+      `${formatTime(new Date(editEntry.from))}–${formatTime(new Date(editEntry.to))}`;
+    $input.value = editEntry.text;
+    document.getElementById('btn-skip-modal').textContent = 'Cancel';
+  } else {
+    modalOpenTime = new Date();
+    document.getElementById('modal-title').textContent = '15 minutes just passed';
+    const from = lastLogTime ? formatTime(lastLogTime) : '--';
+    document.getElementById('modal-time-range').textContent = `${from}–${formatTime(modalOpenTime)}`;
+    $input.value = '';
+    document.getElementById('btn-skip-modal').textContent = 'Skip';
+  }
+
   updateChar();
   $overlay.classList.add('open');
   setTimeout(() => $input.focus(), 350);
 }
 
+function openEditModal(dateKey, entryId) {
+  const entry = loadDayLog(dateKey).find(e => e.id === entryId);
+  if (entry) openModal({ ...entry, dateKey });
+}
+
 function closeModal() {
   $overlay.classList.remove('open');
   $input.blur();
+  editingEntryId = null;
+  editingDateKey = null;
 }
 
 function handleOverlayClick(e) {
@@ -723,6 +791,17 @@ function saveEntry() {
   const text = $input.value.trim();
   if (!text) { $input.focus(); return; }
 
+  if (editingEntryId !== null) {
+    const log = loadDayLog(editingDateKey);
+    const idx = log.findIndex(e => e.id === editingEntryId);
+    if (idx !== -1) { log[idx] = { ...log[idx], text }; saveDayLog(editingDateKey, log); }
+    const wasToday = editingDateKey === todayKey();
+    closeModal();
+    wasToday ? renderTodayLog() : renderHistory();
+    showToast('Updated!');
+    return;
+  }
+
   const entry = {
     id:   Date.now(),
     from: (lastLogTime || new Date()).toISOString(),
@@ -739,29 +818,23 @@ function saveEntry() {
   renderTodayLog();
   showToast('Saved!');
 
-  // Restart timer
   secondsLeft = INTERVAL;
   updateRing(1);
   $digits.textContent = '15:00';
-  $status.textContent = 'Tracking';
-  if (tickInterval) clearInterval(tickInterval);
-  tickInterval = setInterval(tick, 1000);
-  isRunning = true;
-  $btnStart.textContent = 'Pause';
-  $trackingDot.classList.add('visible');
-  if (!sessionStart) sessionStart = new Date();
+  if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+  startTimer();
 }
 
 function skipEntry() {
+  if (editingEntryId !== null) { closeModal(); return; }
   lastLogTime = new Date();
   closeModal();
   if (isRunning) {
     secondsLeft = INTERVAL;
     updateRing(1);
     $digits.textContent = '15:00';
-    $status.textContent = 'Tracking';
-    if (tickInterval) clearInterval(tickInterval);
-    tickInterval = setInterval(tick, 1000);
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+    startTimer();
   }
 }
 
@@ -811,8 +884,9 @@ function renderTodayLog() {
 
   $logList.innerHTML = log.map(e => `
     <div class="log-entry" id="entry-${e.id}">
-      <span class="log-time">${formatTime(new Date(e.to))}</span>
+      <span class="log-time">${formatTimeRange(e.from, e.to)}</span>
       <span class="log-text">${escHtml(e.text)}</span>
+      <button class="log-edit" onclick="openEditModal('${todayKey()}', ${e.id})" title="Edit">✎</button>
       <button class="log-del" onclick="deleteEntry('${todayKey()}', ${e.id})" title="Delete">×</button>
     </div>
   `).join('');
@@ -839,8 +913,9 @@ function renderHistory() {
     const entriesHtml = log.length
       ? log.map(e => `
           <div class="day-entry">
-            <span class="log-time">${formatTime(new Date(e.to))}</span>
+            <span class="log-time">${formatTimeRange(e.from, e.to)}</span>
             <span class="log-text">${escHtml(e.text)}</span>
+            <button class="log-edit" onclick="openEditModal('${dateKey}', ${e.id})" title="Edit">✎</button>
             <button class="log-del" onclick="deleteEntry('${dateKey}', ${e.id})" title="Delete">×</button>
           </div>`).join('')
       : `<div class="day-entry"><span class="log-text" style="color:var(--muted)">No entries</span></div>`;
@@ -930,6 +1005,11 @@ function formatTime(d) {
   const h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
   return `${h % 12 || 12}:${m}${h < 12 ? 'am' : 'pm'}`;
+}
+
+function formatTimeRange(from, to) {
+  if (!from) return formatTime(new Date(to));
+  return `${formatTime(new Date(from))}–${formatTime(new Date(to))}`;
 }
 
 function escHtml(s) {
