@@ -7,7 +7,7 @@
   index.html       — everything: layout, styles, all JavaScript logic
   manifest.json    — PWA name, icons, display mode, theme color
   sw.js            — service worker: caches app files, handles notification clicks
-  tracker-docs/    — project memory (optional: can live in Hormozi/ instead)
+  tracker-docs/    — project memory (optional: can live in quarter/ instead)
 ```
 
 ## index.html Structure

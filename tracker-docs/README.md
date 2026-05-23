@@ -16,7 +16,7 @@ The app files live wherever you put them after copying from the worktree. Recomm
   tracker-docs/   ← this folder, or keep it here and reference it
 ```
 
-Or keep `tracker-docs` here in `/Users/macbookair13/Documents/Business/Hormozi/tracker-docs` and just tell the AI to read it at session start.
+Or keep `tracker-docs` here in `/Users/macbookair13/Documents/Business/quarter/quarter/tracker-docs` and just tell the AI to read it at session start.
 
 ## Read Order For Any New Session
 

@@ -47,7 +47,5 @@ manifest.json   — PWA manifest
 sw.js           — service worker
 ```
 
-Location during build session:
-`/Users/macbookair13/Documents/Business/Hormozi/.claude/worktrees/eloquent-sutherland-1d01b9/`
-
-User will copy these 3 files to their own project folder and manage git from there.
+App files location:
+`/Users/macbookair13/Documents/Business/quarter/quarter/`
