@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tracker" />
+  <meta name="theme-color" content="#0f0f13" />
+  <title>15-Min Tracker</title>
+  <link rel="manifest" href="/manifest.json" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f13;
+      --surface: #1a1a24;
+      --surface2: #22222f;
+      --accent: #6c63ff;
+      --accent2: #a89cff;
+      --text: #f0f0f5;
+      --muted: #888899;
+      --success: #4ade80;
+      --warn: #facc15;
+      --danger: #f87171;
+      --radius: 16px;
+      --nav-h: 60px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+
+    /* ─────────────────── App shell ─────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    header {
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    #date-label { font-size: 13px; color: var(--muted); }
+
+    /* ─────────────────── Notif banner ─────────────────── */
+    #notif-banner {
+      margin: 0 16px 8px;
+      background: #2a2a10;
+      border: 1px solid #5a5a10;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--warn);
+      display: none;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+    #notif-banner button {
+      background: var(--warn);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    /* ─────────────────── Views ─────────────────── */
+    .view {
+      flex: 1;
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+    }
+    .view.active { display: flex; }
+
+    /* ─────────────────── TODAY view ─────────────────── */
+    #timer-card {
+      margin: 4px 16px 8px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px 20px 20px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    #timer-status {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    #timer-ring {
+      position: relative;
+      width: 148px;
+      height: 148px;
+      margin: 0 auto 18px;
+    }
+    #timer-ring svg { transform: rotate(-90deg); width: 148px; height: 148px; }
+    #ring-track { fill: none; stroke: var(--surface2); stroke-width: 8; }
+    #ring-fill {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 408;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear, stroke 0.3s;
+    }
+
+    #timer-display {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    #timer-digits {
+      font-size: 40px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px; line-height: 1;
+    }
+    #timer-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    #btn-row { display: flex; gap: 10px; }
+
+    .btn {
+      border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 600;
+      padding: 12px 24px; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.96); opacity: 0.85; }
+
+    #btn-start { background: var(--accent); color: #fff; flex: 1; }
+    #btn-log-now { background: var(--surface2); color: var(--muted); padding: 12px 16px; }
+
+    /* Today log section */
+    #log-section {
+      flex: 1; overflow: hidden;
+      display: flex; flex-direction: column;
+      margin: 0 16px 0;
+    }
+    #log-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0 8px;
+    }
+    #log-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    #entry-count { font-size: 12px; color: var(--muted); }
+
+    #log-list {
+      flex: 1; overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      display: flex; flex-direction: column; gap: 8px;
+      padding-bottom: 8px;
+    }
+    #log-list::-webkit-scrollbar { display: none; }
+
+    /* ─────────────────── HISTORY view ─────────────────── */
+    #history-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 16px 8px;
+      flex-shrink: 0;
+    }
+    #history-title { font-size: 18px; font-weight: 700; }
+
+    #btn-export {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px;
+      padding: 8px 14px; font-size: 13px; font-weight: 600;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    #btn-export:active { transform: scale(0.96); opacity: 0.85; }
+    #btn-export svg { flex-shrink: 0; }
+
+    #history-list {
+      flex: 1; overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 16px 8px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #history-list::-webkit-scrollbar { display: none; }
+
+    .day-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .day-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .day-card-header:active { opacity: 0.75; }
+
+    .day-info { display: flex; flex-direction: column; gap: 2px; }
+    .day-name { font-size: 15px; font-weight: 600; }
+    .day-meta { font-size: 12px; color: var(--muted); }
+
+    .day-right { display: flex; align-items: center; gap: 10px; }
+    .day-badge {
+      background: var(--surface2);
+      color: var(--accent2);
+      font-size: 12px; font-weight: 600;
+      padding: 3px 9px; border-radius: 20px;
+    }
+    .day-chevron {
+      color: var(--muted); font-size: 14px;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+    .day-card.open .day-chevron { transform: rotate(180deg); }
+
+    .day-entries {
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      border-top: 1px solid var(--surface2);
+    }
+    .day-card.open .day-entries { display: flex; }
+
+    .day-entry {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--surface2);
+    }
+    .day-entry:last-child { border-bottom: none; }
+
+    #history-empty {
+      text-align: center; color: var(--muted);
+      font-size: 14px; padding: 48px 0; line-height: 1.8;
+    }
+    #history-empty .emoji { font-size: 36px; display: block; margin-bottom: 8px; }
+
+    /* ─────────────────── Shared log entry styles ─────────────────── */
+    .log-entry {
+      background: var(--surface);
+      border-radius: 12px; padding: 12px 14px;
+      display: flex; align-items: flex-start; gap: 12px;
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      font-size: 12px; color: var(--accent2); font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap; padding-top: 1px; min-width: 44px;
+    }
+    .log-text { font-size: 15px; line-height: 1.4; flex: 1; }
+    .log-del {
+      background: none; border: none; color: var(--surface2);
+      font-size: 18px; cursor: pointer; padding: 0 2px; line-height: 1;
+      -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+    }
+    .log-del:active { color: var(--danger); }
+
+    #empty-state {
+      text-align: center; color: var(--muted);
+      font-size: 14px; padding: 28px 0; line-height: 1.8;
+    }
+    #empty-state .emoji { font-size: 36px; display: block; margin-bottom: 8px; }
+
+    /* ─────────────────── Bottom nav ─────────────────── */
+    #bottom-nav {
+      display: flex;
+      background: var(--surface);
+      border-top: 1px solid var(--surface2);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      flex-shrink: 0;
+    }
+    .nav-tab {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 10px 0 8px; gap: 4px;
+      cursor: pointer; border: none; background: none;
+      color: var(--muted); font-size: 11px; font-weight: 500;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.15s;
+    }
+    .nav-tab.active { color: var(--accent2); }
+    .nav-tab svg { width: 22px; height: 22px; }
+
+    /* Tracking dot on Today tab */
+    .nav-tab .tab-icon-wrap { position: relative; }
+    .tracking-dot {
+      position: absolute; top: -1px; right: -3px;
+      width: 7px; height: 7px;
+      background: var(--success);
+      border-radius: 50%;
+      display: none;
+      animation: blink 2s ease-in-out infinite;
+    }
+    .tracking-dot.visible { display: block; }
+    @keyframes blink {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    /* ─────────────────── Entry Modal ─────────────────── */
+    #modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 100; opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    #modal-overlay.open { opacity: 1; pointer-events: all; }
+
+    #modal {
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 20px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+      width: 100%; max-width: 480px;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    #modal-overlay.open #modal { transform: translateY(0); }
+
+    #modal-handle {
+      width: 36px; height: 4px;
+      background: var(--surface2); border-radius: 2px;
+      margin: 0 auto 16px;
+    }
+    #modal-title {
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+    }
+    #modal-prompt { font-size: 18px; font-weight: 600; margin-bottom: 16px; line-height: 1.3; }
+    #modal-prompt span { color: var(--accent2); }
+
+    #entry-input {
+      width: 100%; background: var(--surface2);
+      border: 2px solid transparent; border-radius: 12px;
+      padding: 14px 16px; font-size: 16px; color: var(--text);
+      outline: none; transition: border-color 0.2s;
+      resize: none; font-family: inherit; line-height: 1.5;
+    }
+    #entry-input:focus { border-color: var(--accent); }
+    #entry-input::placeholder { color: var(--muted); }
+
+    #char-hint {
+      font-size: 11px; color: var(--muted);
+      text-align: right; margin-top: 4px; margin-bottom: 12px;
+    }
+    #modal-actions { display: flex; gap: 10px; }
+    #btn-save { background: var(--accent); color: #fff; flex: 1; }
+    #btn-skip-modal { background: var(--surface2); color: var(--muted); }
+
+    /* ─────────────────── Alarm pulse ─────────────────── */
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(108,99,255,0.6); }
+      50%       { box-shadow: 0 0 0 20px rgba(108,99,255,0); }
+    }
+    #timer-ring.alarm { animation: pulse 0.8s ease-in-out 3; }
+
+    /* ─────────────────── Toast ─────────────────── */
+    #toast {
+      position: fixed;
+      bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+      left: 50%; transform: translateX(-50%) translateY(60px);
+      background: var(--surface2); color: var(--text);
+      border: 1px solid #333345;
+      padding: 10px 20px; border-radius: 100px;
+      font-size: 14px; font-weight: 500;
+      transition: transform 0.3s, opacity 0.3s;
+      opacity: 0; pointer-events: none; white-space: nowrap; z-index: 200;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <h1>15-Min Tracker</h1>
+    <span id="date-label"></span>
+  </header>
+
+  <!-- Notification nudge -->
+  <div id="notif-banner">
+    Enable notifications so alarms fire when screen locks.
+    <button onclick="requestNotifPermission()">Enable</button>
+  </div>
+
+  <!-- ── TODAY view ── -->
+  <div id="view-today" class="view active">
+    <div id="timer-card">
+      <div id="timer-status">Ready</div>
+      <div id="timer-ring">
+        <svg viewBox="0 0 148 148">
+          <circle id="ring-track" cx="74" cy="74" r="65"/>
+          <circle id="ring-fill"  cx="74" cy="74" r="65"/>
+        </svg>
+        <div id="timer-display">
+          <div id="timer-digits">15:00</div>
+          <div id="timer-label">minutes</div>
+        </div>
+      </div>
+      <div id="btn-row">
+        <button class="btn" id="btn-start" onclick="toggleTimer()">Start Tracking</button>
+        <button class="btn" id="btn-log-now" onclick="openLogNow()">Log Now</button>
+      </div>
+    </div>
+
+    <div id="log-section">
+      <div id="log-header">
+        <span id="log-title">Today's Log</span>
+        <span id="entry-count"></span>
+      </div>
+      <div id="log-list">
+        <div id="empty-state">
+          <span class="emoji">⏱</span>
+          Hit <strong>Start Tracking</strong> to begin.<br/>
+          Every 15 min you'll be prompted<br/>to log what you were doing.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HISTORY view ── -->
+  <div id="view-history" class="view">
+    <div id="history-header">
+      <span id="history-title">History</span>
+      <button id="btn-export" onclick="exportData()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Export CSV
+      </button>
+    </div>
+    <div id="history-list">
+      <div id="history-empty">
+        <span class="emoji">📅</span>
+        No history yet.<br/>Start tracking and your days<br/>will appear here.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom nav ── -->
+  <nav id="bottom-nav">
+    <button class="nav-tab active" id="tab-today" onclick="switchTab('today')">
+      <span class="tab-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="tracking-dot" id="tracking-dot"></span>
+      </span>
+      Today
+    </button>
+    <button class="nav-tab" id="tab-history" onclick="switchTab('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8"  y1="2" x2="8"  y2="6"/>
+        <line x1="3"  y1="10" x2="21" y2="10"/>
+      </svg>
+      History
+    </button>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- Entry Modal -->
+<div id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div id="modal">
+    <div id="modal-handle"></div>
+    <div id="modal-title">15 minutes just passed</div>
+    <div id="modal-prompt">What were you doing <span id="modal-time-range"></span>?</div>
+    <textarea id="entry-input" rows="3"
+      placeholder="e.g. emails, coffee + news, gym…"
+      maxlength="200"
+      oninput="updateChar()"
+      onkeydown="handleKey(event)"></textarea>
+    <div id="char-hint"><span id="char-count">0</span>/200</div>
+    <div id="modal-actions">
+      <button class="btn" id="btn-save" onclick="saveEntry()">Save</button>
+      <button class="btn" id="btn-skip-modal" onclick="skipEntry()">Skip</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────── Constants ───────────────────
+const INTERVAL  = 15 * 60;   // seconds
+const STORE_KEY = 'tracker_log_v1';
+const CIRC      = 2 * Math.PI * 65; // r=65 → ~408
+
+// ─────────────────── State ───────────────────────
+let secondsLeft  = INTERVAL;
+let isRunning    = false;
+let tickInterval = null;
+let sessionStart = null;
+let lastLogTime  = null;
+let audioCtx     = null;
+let currentTab   = 'today';
+
+// ─────────────────── DOM refs ────────────────────
+const $status    = document.getElementById('timer-status');
+const $digits    = document.getElementById('timer-digits');
+const $ring      = document.getElementById('ring-fill');
+const $ringEl    = document.getElementById('timer-ring');
+const $btnStart  = document.getElementById('btn-start');
+const $logList   = document.getElementById('log-list');
+const $empty     = document.getElementById('empty-state');
+const $count     = document.getElementById('entry-count');
+const $overlay   = document.getElementById('modal-overlay');
+const $input     = document.getElementById('entry-input');
+const $toast     = document.getElementById('toast');
+const $notifBanner  = document.getElementById('notif-banner');
+const $dateLabel    = document.getElementById('date-label');
+const $trackingDot  = document.getElementById('tracking-dot');
+const $historyList  = document.getElementById('history-list');
+
+// ─────────────────── Init ────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  $dateLabel.textContent = new Date().toLocaleDateString('en-US',
+    { weekday: 'short', month: 'short', day: 'numeric' });
+  updateRing(1);
+  renderTodayLog();
+  registerSW();
+  checkNotifPermission();
+});
+
+function registerSW() {
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+function checkNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default')
+    $notifBanner.style.display = 'block';
+}
+
+async function requestNotifPermission() {
+  const p = await Notification.requestPermission();
+  if (p === 'granted') {
+    $notifBanner.style.display = 'none';
+    showToast('Notifications enabled!');
+  }
+}
+
+// ─────────────────── Tab nav ─────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('view-today').classList.toggle('active', tab === 'today');
+  document.getElementById('view-history').classList.toggle('active', tab === 'history');
+  document.getElementById('tab-today').classList.toggle('active', tab === 'today');
+  document.getElementById('tab-history').classList.toggle('active', tab === 'history');
+  if (tab === 'history') renderHistory();
+}
+
+// ─────────────────── Timer ───────────────────────
+function toggleTimer() {
+  isRunning ? stopTimer() : startTimer();
+}
+
+function startTimer() {
+  isRunning = true;
+  if (!sessionStart) sessionStart = new Date();
+  lastLogTime = lastLogTime || new Date();
+  $btnStart.textContent = 'Pause';
+  $status.textContent = 'Tracking';
+  $trackingDot.classList.add('visible');
+  tickInterval = setInterval(tick, 1000);
+  tick();
+}
+
+function stopTimer() {
+  isRunning = false;
+  clearInterval(tickInterval);
+  tickInterval = null;
+  $btnStart.textContent = 'Resume';
+  $status.textContent = 'Paused';
+  $trackingDot.classList.remove('visible');
+}
+
+function tick() {
+  if (secondsLeft <= 0) { onAlarm(); return; }
+  secondsLeft--;
+  const m = Math.floor(secondsLeft / 60);
+  const s = secondsLeft % 60;
+  $digits.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  updateRing(secondsLeft / INTERVAL);
+}
+
+function onAlarm() {
+  clearInterval(tickInterval);
+  tickInterval = null;
+  secondsLeft = INTERVAL;
+  updateRing(1);
+  $digits.textContent = '15:00';
+  $status.textContent = 'Log time!';
+
+  playDing();
+  vibrateDevice();
+  sendNotification();
+
+  $ringEl.classList.add('alarm');
+  $ringEl.addEventListener('animationend', () => $ringEl.classList.remove('alarm'), { once: true });
+
+  // Switch to today tab so modal makes sense
+  if (currentTab !== 'today') switchTab('today');
+  openModal();
+}
+
+function openLogNow() {
+  if (!isRunning && !sessionStart) { showToast('Start tracking first'); return; }
+  openModal();
+}
+
+// ─────────────────── Ring ────────────────────────
+function updateRing(fraction) {
+  $ring.style.strokeDashoffset = CIRC * (1 - fraction);
+  $ring.style.stroke = fraction < 0.25 ? '#f87171'
+    : fraction < 0.5  ? '#facc15'
+    : 'var(--accent)';
+}
+
+// ─────────────────── Audio ───────────────────────
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playDing() {
+  try {
+    const ctx = getAudioCtx();
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.35, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      osc.start(t); osc.stop(t + 0.65);
+    });
+  } catch(e) {}
+}
+
+function vibrateDevice() {
+  if ('vibrate' in navigator)
+    navigator.vibrate([200, 100, 200, 100, 400]);
+}
+
+// ─────────────────── Notifications ───────────────
+function sendNotification() {
+  if (Notification.permission === 'granted') {
+    new Notification('Time to log!', {
+      body: 'What did you do in the last 15 minutes?',
+      tag: 'tracker-alarm',
+      requireInteraction: true
+    });
+  }
+}
+
+// ─────────────────── Modal ───────────────────────
+let modalOpenTime = null;
+
+function openModal() {
+  modalOpenTime = new Date();
+  const from = lastLogTime ? formatTime(lastLogTime) : '--';
+  const to   = formatTime(modalOpenTime);
+  document.getElementById('modal-time-range').textContent = `${from}–${to}`;
+  $input.value = '';
+  updateChar();
+  $overlay.classList.add('open');
+  setTimeout(() => $input.focus(), 350);
+}
+
+function closeModal() {
+  $overlay.classList.remove('open');
+  $input.blur();
+}
+
+function handleOverlayClick(e) {
+  if (e.target === $overlay) closeModal();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEntry(); }
+}
+
+function updateChar() {
+  document.getElementById('char-count').textContent = $input.value.length;
+}
+
+function saveEntry() {
+  const text = $input.value.trim();
+  if (!text) { $input.focus(); return; }
+
+  const entry = {
+    id:   Date.now(),
+    from: (lastLogTime || new Date()).toISOString(),
+    to:   (modalOpenTime || new Date()).toISOString(),
+    text
+  };
+
+  const log = loadDayLog(todayKey());
+  log.unshift(entry);
+  saveDayLog(todayKey(), log);
+  lastLogTime = new Date();
+
+  closeModal();
+  renderTodayLog();
+  showToast('Saved!');
+
+  // Restart timer
+  secondsLeft = INTERVAL;
+  updateRing(1);
+  $digits.textContent = '15:00';
+  $status.textContent = 'Tracking';
+  if (tickInterval) clearInterval(tickInterval);
+  tickInterval = setInterval(tick, 1000);
+  isRunning = true;
+  $btnStart.textContent = 'Pause';
+  $trackingDot.classList.add('visible');
+  if (!sessionStart) sessionStart = new Date();
+}
+
+function skipEntry() {
+  lastLogTime = new Date();
+  closeModal();
+  if (isRunning) {
+    secondsLeft = INTERVAL;
+    updateRing(1);
+    $digits.textContent = '15:00';
+    $status.textContent = 'Tracking';
+    if (tickInterval) clearInterval(tickInterval);
+    tickInterval = setInterval(tick, 1000);
+  }
+}
+
+// ─────────────────── Storage ─────────────────────
+function todayKey() {
+  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+}
+
+function loadDayLog(dateKey) {
+  try {
+    const raw = localStorage.getItem(`${STORE_KEY}_${dateKey}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveDayLog(dateKey, log) {
+  localStorage.setItem(`${STORE_KEY}_${dateKey}`, JSON.stringify(log));
+}
+
+function getAllDayKeys() {
+  const prefix = `${STORE_KEY}_`;
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefix)) keys.push(k.replace(prefix, ''));
+  }
+  return keys.sort((a, b) => b.localeCompare(a)); // newest first
+}
+
+function deleteEntry(dateKey, id) {
+  const log = loadDayLog(dateKey).filter(e => e.id !== id);
+  saveDayLog(dateKey, log);
+  if (dateKey === todayKey()) renderTodayLog();
+  else renderHistory();
+}
+
+// ─────────────────── Render: Today ───────────────
+function renderTodayLog() {
+  const log = loadDayLog(todayKey());
+  $count.textContent = log.length ? `${log.length} entr${log.length === 1 ? 'y' : 'ies'}` : '';
+
+  if (!log.length) {
+    $logList.innerHTML = '';
+    $logList.appendChild($empty);
+    return;
+  }
+
+  $logList.innerHTML = log.map(e => `
+    <div class="log-entry" id="entry-${e.id}">
+      <span class="log-time">${formatTime(new Date(e.to))}</span>
+      <span class="log-text">${escHtml(e.text)}</span>
+      <button class="log-del" onclick="deleteEntry('${todayKey()}', ${e.id})" title="Delete">×</button>
+    </div>
+  `).join('');
+}
+
+// ─────────────────── Render: History ─────────────
+function renderHistory() {
+  const keys = getAllDayKeys();
+  const today = todayKey();
+
+  if (!keys.length) {
+    $historyList.innerHTML = `<div id="history-empty">
+      <span class="emoji">📅</span>
+      No history yet.<br/>Start tracking and your days<br/>will appear here.
+    </div>`;
+    return;
+  }
+
+  $historyList.innerHTML = keys.map(dateKey => {
+    const log   = loadDayLog(dateKey);
+    const label = dateKey === today ? 'Today' : formatDateLabel(dateKey);
+    const span  = log.length ? timeSpan(log) : '';
+
+    const entriesHtml = log.length
+      ? log.map(e => `
+          <div class="day-entry">
+            <span class="log-time">${formatTime(new Date(e.to))}</span>
+            <span class="log-text">${escHtml(e.text)}</span>
+            <button class="log-del" onclick="deleteEntry('${dateKey}', ${e.id})" title="Delete">×</button>
+          </div>`).join('')
+      : `<div class="day-entry"><span class="log-text" style="color:var(--muted)">No entries</span></div>`;
+
+    return `
+      <div class="day-card" id="day-${dateKey}">
+        <div class="day-card-header" onclick="toggleDay('${dateKey}')">
+          <div class="day-info">
+            <span class="day-name">${label}</span>
+            ${span ? `<span class="day-meta">${span}</span>` : ''}
+          </div>
+          <div class="day-right">
+            <span class="day-badge">${log.length} entr${log.length === 1 ? 'y' : 'ies'}</span>
+            <span class="day-chevron">▾</span>
+          </div>
+        </div>
+        <div class="day-entries">${entriesHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleDay(dateKey) {
+  const card = document.getElementById(`day-${dateKey}`);
+  if (card) card.classList.toggle('open');
+}
+
+function timeSpan(log) {
+  // log is newest-first
+  const first = new Date(log[log.length - 1].from);
+  const last  = new Date(log[0].to);
+  return `${formatTime(first)} – ${formatTime(last)}`;
+}
+
+function formatDateLabel(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// ─────────────────── Export ───────────────────────
+async function exportData() {
+  const keys = getAllDayKeys();
+  if (!keys.length) { showToast('Nothing to export yet'); return; }
+
+  // Build CSV
+  const rows = ['Date,Day,Time,Notes'];
+  keys.forEach(dateKey => {
+    const log = loadDayLog(dateKey);
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+    [...log].reverse().forEach(e => {
+      const time = formatTime(new Date(e.to));
+      rows.push(`${dateKey},${dayName},${time},"${e.text.replace(/"/g, '""')}"`);
+    });
+  });
+
+  const csv      = rows.join('\n');
+  const filename = `tracker-${keys[0]}.csv`;
+  const file     = new File([csv], filename, { type: 'text/csv' });
+
+  // On touch devices (iPhone/iPad/Android) use the native Share Sheet
+  const isTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  if (isTouch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: '15-Min Tracker Export' });
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return; // user cancelled — don't fall through
+    }
+  }
+
+  // Fallback: standard download (desktop / Android)
+  const url = URL.createObjectURL(file);
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('CSV downloaded');
+}
+
+// ─────────────────── Helpers ─────────────────────
+function formatTime(d) {
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h % 12 || 12}:${m}${h < 12 ? 'am' : 'pm'}`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  $toast.textContent = msg;
+  $toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $toast.classList.remove('show'), 2200);
+}
+
+// Warm up AudioContext on first touch (iOS requirement)
+document.addEventListener('touchstart', () => {
+  if (!audioCtx) try { getAudioCtx(); } catch(e) {}
+}, { once: true });
+</script>
+</body>
+</html>
